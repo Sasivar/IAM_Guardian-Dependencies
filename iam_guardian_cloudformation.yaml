@@ -1,0 +1,358 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  IAM Guardian - Complete Infrastructure Stack
+  Creates EC2, S3, IAM roles, and auto-configures the application
+  on the master account.
+
+Parameters:
+
+  GitHubRepoURL:
+    Type: String
+    Description: Your GitHub repository URL
+    Default: "https://github.com/Sasivar/IAM_Guardian.git"
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: iam_guardian
+    Description: EC2 Key Pair name for SSH access
+
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t2.micro, t2.small, t2.medium, t3.small]
+    Description: EC2 instance type (t2.micro is free tier)
+
+  Child1AccountId:
+    Type: String
+    Default: "266889036314"
+    Description: Child Account 1 ID
+
+  Child2AccountId:
+    Type: String
+    Default: "796761618689"
+    Description: Child Account 2 ID
+
+  Child3AccountId:
+    Type: String
+    Default: "778685277916"
+    Description: Child Account 3 ID
+
+  BucketName:
+    Type: String
+    Default: "iam-guardian-master-bucket"
+    Description: S3 bucket name for storing scan results
+
+Resources:
+
+  # ── S3 Bucket ────────────────────────────────────────────────────
+
+  IAMGuardianBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: IAMGuardian
+
+  IAMGuardianBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref IAMGuardianBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowChildAccountsWrite
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${Child1AccountId}:role/IAMGuardianScanRole"
+                - !Sub "arn:aws:iam::${Child2AccountId}:role/IAMGuardianScanRole"
+                - !Sub "arn:aws:iam::${Child3AccountId}:role/IAMGuardianScanRole"
+            Action:
+              - s3:PutObject
+              - s3:PutObjectAcl
+            Resource: !Sub "arn:aws:s3:::${BucketName}/*"
+
+  # ── IAM Role for EC2 ─────────────────────────────────────────────
+
+  IAMGuardianEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: IAMGuardianEC2Role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Project
+          Value: IAMGuardian
+
+  IAMGuardianEC2Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: IAMGuardianEC2FullPolicy
+      Roles:
+        - !Ref IAMGuardianEC2Role
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+
+          - Sid: AssumeChildAccountRoles
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource:
+              - !Sub "arn:aws:iam::${Child1AccountId}:role/IAMGuardianScanRole"
+              - !Sub "arn:aws:iam::${Child2AccountId}:role/IAMGuardianScanRole"
+              - !Sub "arn:aws:iam::${Child3AccountId}:role/IAMGuardianScanRole"
+
+          - Sid: InvokeLambda
+            Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource:
+              - !Sub "arn:aws:lambda:${AWS::Region}:${Child1AccountId}:function:IAMGuardianCollector"
+              - !Sub "arn:aws:lambda:${AWS::Region}:${Child2AccountId}:function:IAMGuardianCollector"
+              - !Sub "arn:aws:lambda:${AWS::Region}:${Child3AccountId}:function:IAMGuardianCollector"
+
+          - Sid: MasterS3Access
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:DeleteObject
+            Resource:
+              - !Sub "arn:aws:s3:::${BucketName}"
+              - !Sub "arn:aws:s3:::${BucketName}/*"
+
+          - Sid: ReadOwnIAM
+            Effect: Allow
+            Action:
+              - iam:ListRoles
+              - iam:ListUsers
+              - iam:ListGroups
+              - iam:ListPolicies
+              - iam:ListRolePolicies
+              - iam:ListUserPolicies
+              - iam:ListGroupPolicies
+              - iam:ListAttachedRolePolicies
+              - iam:ListAttachedUserPolicies
+              - iam:ListAttachedGroupPolicies
+              - iam:GetRole
+              - iam:GetUser
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRolePolicy
+              - iam:GetUserPolicy
+            Resource: "*"
+
+          - Sid: BedrockAccess
+            Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+              - bedrock:InvokeModelWithResponseStream
+            Resource: "*"
+
+          - Sid: CreateDemoRoles
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:DeleteRole
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:TagRole
+            Resource: "arn:aws:iam::*:role/*"
+
+  # ── EC2 Instance Profile ─────────────────────────────────────────
+
+  IAMGuardianInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: IAMGuardianInstanceProfile
+      Roles:
+        - !Ref IAMGuardianEC2Role
+
+  # ── Security Group ───────────────────────────────────────────────
+
+  IAMGuardianSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: IAMGuardianSG
+      GroupDescription: Security group for IAM Guardian EC2
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: SSH access
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+          Description: FastAPI backend
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+          Description: React frontend
+      Tags:
+        - Key: Project
+          Value: IAMGuardian
+
+  # ── EC2 Instance ─────────────────────────────────────────────────
+
+  IAMGuardianEC2:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - IAMGuardianEC2Policy
+      - IAMGuardianBucket
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      ImageId: !FindInMap [RegionAMIMap, !Ref AWS::Region, AMI]
+      IamInstanceProfile: !Ref IAMGuardianInstanceProfile
+      SecurityGroups:
+        - !Ref IAMGuardianSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp2
+      Tags:
+        - Key: Name
+          Value: iam-guardian-server
+        - Key: Project
+          Value: IAMGuardian
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          exec > /var/log/iam-guardian-setup.log 2>&1
+
+          echo "======================================"
+          echo "IAM Guardian Setup Starting"
+          echo "======================================"
+
+          # ── System update and dependencies ─────────────────────
+          apt-get update -y
+          apt-get upgrade -y
+          apt-get install -y python3-pip python3-venv nodejs npm git curl
+
+          # ── Get EC2 public IP ───────────────────────────────────
+          PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+          echo "Public IP: $PUBLIC_IP"
+
+          # ── Clone GitHub repo ───────────────────────────────────
+          cd /home/ubuntu
+          git clone ${GitHubRepoURL} iam-guardian
+          chown -R ubuntu:ubuntu /home/ubuntu/iam-guardian
+
+          # ── Create .env file ────────────────────────────────────
+          cat > /home/ubuntu/iam-guardian/backend/.env << EOF
+          MASTER_BUCKET=${BucketName}
+          AWS_REGION=${AWS::Region}
+          EOF
+
+          # ── Create __init__.py files ────────────────────────────
+          touch /home/ubuntu/iam-guardian/backend/collector/__init__.py
+          touch /home/ubuntu/iam-guardian/backend/agent/__init__.py
+          touch /home/ubuntu/iam-guardian/backend/reports/__init__.py
+
+          # ── Python virtual environment ──────────────────────────
+          cd /home/ubuntu/iam-guardian/backend
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install fastapi uvicorn boto3 python-dotenv reportlab
+
+          # ── Update App.js with current public IP ────────────────
+          sed -i "s|const API = \"http://.*:8000\"|const API = \"http://$PUBLIC_IP:8000\"|g" \
+            /home/ubuntu/iam-guardian/frontend/src/App.js
+          echo "Updated App.js with IP: $PUBLIC_IP"
+
+          # ── Build React frontend ────────────────────────────────
+          cd /home/ubuntu/iam-guardian/frontend
+          npm install
+          npm run build
+
+          # ── Start backend ───────────────────────────────────────
+          cd /home/ubuntu/iam-guardian/backend
+          source venv/bin/activate
+          nohup uvicorn main:app --host 0.0.0.0 --port 8000 > /home/ubuntu/backend.log 2>&1 &
+          echo "Backend started on port 8000"
+
+          # ── Start frontend ──────────────────────────────────────
+          cd /home/ubuntu/iam-guardian/frontend/build
+          nohup python3 -m http.server 3000 > /home/ubuntu/frontend.log 2>&1 &
+          echo "Frontend started on port 3000"
+
+          echo "======================================"
+          echo "IAM Guardian Setup Complete!"
+          echo "Dashboard: http://$PUBLIC_IP:3000"
+          echo "API:       http://$PUBLIC_IP:8000"
+          echo "======================================"
+
+# ══════════════════════════════════════════════════════════════════
+# AMI MAPPING - Ubuntu 22.04 LTS per region
+# ══════════════════════════════════════════════════════════════════
+
+Mappings:
+  RegionAMIMap:
+    us-east-1:
+      AMI: ami-0c7217cdde317cfec
+    us-east-2:
+      AMI: ami-05fb0b8c1424f266b
+    us-west-1:
+      AMI: ami-0ce2cb35386fc22e9
+    us-west-2:
+      AMI: ami-008fe2fc65df48dac
+    eu-west-1:
+      AMI: ami-0905a3c97561e0b69
+    eu-central-1:
+      AMI: ami-0faab6bdbac9486fb
+    ap-southeast-1:
+      AMI: ami-0fa377108253bf620
+    ap-south-1:
+      AMI: ami-0f58b397bc5c1f2e8
+
+# ══════════════════════════════════════════════════════════════════
+# OUTPUTS
+# ══════════════════════════════════════════════════════════════════
+
+Outputs:
+
+  EC2PublicIP:
+    Description: EC2 Public IP Address
+    Value: !GetAtt IAMGuardianEC2.PublicIp
+
+  DashboardURL:
+    Description: IAM Guardian Dashboard URL
+    Value: !Sub "http://${IAMGuardianEC2.PublicIp}:3000"
+
+  BackendURL:
+    Description: IAM Guardian API URL
+    Value: !Sub "http://${IAMGuardianEC2.PublicIp}:8000"
+
+  S3BucketName:
+    Description: S3 Bucket for scan results
+    Value: !Ref IAMGuardianBucket
+
+  EC2RoleARN:
+    Description: EC2 IAM Role ARN
+    Value: !GetAtt IAMGuardianEC2Role.Arn
+
+  SSHCommand:
+    Description: SSH command to connect to EC2
+    Value: !Sub "ssh -i ${KeyPairName}.pem ubuntu@${IAMGuardianEC2.PublicIp}"
