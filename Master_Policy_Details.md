@@ -1,4 +1,5 @@
 # Master IAM Policy
+- To check the IAM policy is matching the below permission after deploying the stack
 
 # Policy 1: AssumeChildRoles
 
