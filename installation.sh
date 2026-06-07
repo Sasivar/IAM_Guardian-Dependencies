@@ -10,7 +10,7 @@ exec > /var/log/iam-guardian-setup.log 2>&1
 # ── Variables ────────────────────────────────────────────────────────────────
 GITHUB_REPO_URL="https://github.com/Sasivar/IAM_Guardian.git"
 MASTER_BUCKET="iam-guardian-master-bucket"   # Change to your actual bucket name
-AWS_REGION="ap-south-1"                      # Change to your actual region
+AWS_REGION="us-east-1"                      # Change to your actual region
 
 echo "======================================"
 echo " IAM Guardian Setup Starting"
