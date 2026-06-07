@@ -5,6 +5,29 @@
 # =============================================================================
 
 set -e
+
+echo "===================================================="
+echo "               ANTHROPIC API KEY                    "
+echo "===================================================="
+echo ""
+
+# ── Force Interactive User Input ─────────────────────────────────────────────
+while true; do
+    read -rp "Enter your ANTHROPIC_API_KEY: " ANTHROPIC_API_KEY
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        echo "ERROR: Key cannot be empty. Please try again."
+        echo ""
+    else
+        break
+    fi
+done
+
+echo ""
+echo "Key accepted. Beginning background setup installation..."
+echo "All following installation output will be sent to /var/log/iam-guardian-setup.log"
+echo "Please wait..."
+
+# ── Redirect remaining outputs to log file now that input is captured ────────
 exec > /var/log/iam-guardian-setup.log 2>&1
 
 # ── Variables ────────────────────────────────────────────────────────────────
@@ -63,6 +86,7 @@ echo "[5/8] Creating backend .env file..."
 cat > /home/ubuntu/iam-guardian/backend/.env << EOF
 MASTER_BUCKET=${MASTER_BUCKET}
 AWS_REGION=${AWS_REGION}
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
 EOF
 chown ubuntu:ubuntu /home/ubuntu/iam-guardian/backend/.env
 
