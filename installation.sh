@@ -103,7 +103,7 @@ cd /home/ubuntu/iam-guardian/backend
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install fastapi uvicorn boto3 python-dotenv reportlab
+pip install fastapi uvicorn boto3 python-dotenv reportlab anthropic
 
 # ── 8. Build React frontend ───────────────────────────────────────────────────
 echo "[8/8] Building React frontend..."
