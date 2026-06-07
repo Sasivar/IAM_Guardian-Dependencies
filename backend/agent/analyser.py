@@ -6,7 +6,9 @@ Uses Claude to classify IAM policies as RED / AMBER / GREEN
 import json
 import os
 import anthropic
+from dotenv import load_dotenv
 
+load_dotenv()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 
