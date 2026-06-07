@@ -249,6 +249,7 @@ Resources:
           # ── System update and dependencies ─────────────────────
           apt-get update -y
           apt-get upgrade -y
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
           apt-get install -y python3-pip python3-venv nodejs npm git curl
 
           # ── Get EC2 public IP ───────────────────────────────────
