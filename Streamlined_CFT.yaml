@@ -68,6 +68,8 @@ Resources:
                 - !Sub "arn:aws:iam::${Child2AccountId}:role/IAMGuardianCollector-role-3h1tnig2"
                 - !Sub "arn:aws:iam::${Child2AccountId}:role/IAMGuardianScanRole"
                 - !Sub "arn:aws:iam::${Child1AccountId}:role/IAMGuardianScanRole"
+                - !Sub "arn:aws:iam::${Child3AccountId}:role/IAMGuardianCollector-role-n8133mdq"
+                - !Sub "arn:aws:iam::${Child1AccountId}:role/IAMGuardian**********"
             Action:
               - s3:PutObject
               - s3:PutObjectAcl
