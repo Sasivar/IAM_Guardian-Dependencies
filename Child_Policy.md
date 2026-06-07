@@ -22,8 +22,6 @@
 }
 ```
 
-!image.png
-
 - Configuration → Permission → Create new execution role —— **IAMGuardianCollector-role-3h1tnig2**
     - Create inline policy
     
